@@ -55,6 +55,12 @@ ActBus_    = evalin('base', 'ActuationBus');
 EnvBus_    = evalin('base', 'EnvBus');
 NavBus_    = evalin('base', 'NavBus');
 
+% Verify that StateBus has 2 elements
+nu_elem = StateBus_.Elements(1);
+eta_elem = StateBus_.Elements(2);
+report('StateBus.nu is Bus: NuBus', strcmp(nu_elem.DataType, 'Bus: NuBus'));
+report('StateBus.eta is Bus: EtaBus', strcmp(eta_elem.DataType, 'Bus: EtaBus'));
+
 report('NuBus  has 6 elements',        numel(NuBus_.Elements)    == 6);
 report('EtaBus has 6 elements',        numel(EtaBus_.Elements)   == 6);
 report('StateBus has 2 sub-buses',     numel(StateBus_.Elements) == 2);
@@ -63,6 +69,20 @@ report('ControlBus has 2 elements',    numel(CtrlBus_.Elements)  == 2);
 report('ActuationBus has 7 elements',  numel(ActBus_.Elements)   == 7);
 report('EnvBus has 4 elements',        numel(EnvBus_.Elements)   == 4);
 report('NavBus has 3 elements',        numel(NavBus_.Elements)   == 3);
+
+% -------------------------------------------------------------------------
+% MSS Toolbox prerequisite
+% -------------------------------------------------------------------------
+
+fprintf('\n--- MSS Toolbox prerequisite ---\n');
+try
+    [~,~,M] = remus100();
+    report('remus100() returns a mass matrix', size(M,1)==6 && size(M,2)==6);
+catch
+    report('remus100() is callable (MSS Toolbox installed)', false);
+    fprintf('  ERROR: MSS Toolbox not found or not on path.\n');
+    fprintf('  Run mssstart from the MSS root folder.\n');
+end
 
 % -------------------------------------------------------------------------
 % 3. GuidanceBus element names are exactly correct
@@ -130,6 +150,7 @@ report('psi = x(12) matches', x_test(12) == eta_test(6));
 % -------------------------------------------------------------------------
 fprintf('\n--- PWM mapping ---\n');
 % Rudder: delta ∈ [-delta_max, +delta_max] → PWM ∈ [1000, 2000]
+assert(auv_.act.delta_max > 0, 'delta_max must be positive');
 d_max  = auv_.act.delta_max;
 pwm_n  = auv_.act.pwm_fin_neutral;
 pwm_r  = auv_.act.pwm_fin_range;

@@ -26,8 +26,10 @@
 % Author: Generated for AUV Simulation Project
 % Phase:  1 — State Representation
 
-clear_buses_if_exist = @(names) cellfun(@(n) ...
-    evalin('base', sprintf('if exist(''%s'',''var''); clear %s; end', n, n)), names);
+% Clear existing bus variables to avoid conflicts
+bus_names = {'NuBus','EtaBus','StateBus','GuidanceBus','CtrlDebugBus', ...
+             'ControlBus','ActuationBus','EnvBus','NavBus'};
+cellfun(@(n) evalin('base', ['clear ' n]), bus_names);
 
 % =========================================================================
 % 1.  NuBus  —  body-frame velocity vector  [6×1]
@@ -183,7 +185,7 @@ elems(6).Description = 'Integrated speed error (m·s)';
 
 elems(7) = Simulink.BusElement;
 elems(7).Name = 'ctrl_id';
-elems(7).Dimensions = 4; elems(7).DataType = 'uint8';
+elems(7).Dimensions = 1; elems(7).DataType = 'uint8';
 elems(7).Description = 'Algorithm tag: PID=1, SMC=2, HOSMC=3, AFRTSMC=4';
 
 CtrlDebugBus = Simulink.Bus;
