@@ -1,0 +1,55 @@
+AUV_Project/
+│
+├── README.md                         # Project overview, setup instructions
+├── startup.m                         # Runs buses, auv_params, adds paths
+│
+├── config/                           # Configuration scripts (Phase 1)
+│   ├── buses.m                       # Bus object definitions
+│   ├── auv_params.m                  # Vehicle parameters struct
+│   └── test_phase1.m                 # Phase 1 gate test
+│
+├── modules/                          # Simulink model references (M1–M7)
+│   ├── M2_Guidance/
+│   │   └── Guidance_M2.slx           # To be built in Phase 6
+│   ├── M3_Control/
+│   │   ├── Control_M3_PID.slx        # Phase 5
+│   │   ├── Control_M3_SMC.slx        # Phase 9 (swap)
+│   │   └── Control_M3_HOSMC.slx      # Future
+│   ├── M4_Actuation/
+│   │   └── Actuation_M4.slx          # Phase 3
+│   ├── M5_Dynamics/
+│   │   ├── dynamics_sfcn.m           # Level‑2 S‑Function (Phase 2)
+│   │   ├── build_dynamics_block.m    # Builder script (run once)
+│   │   └── Dynamics_M5.slx           # Generated model (do not edit manually)
+│   ├── M6_Navigation/
+│   │   └── Navigation_M6.slx         # Phase 4 (pass‑through), later EKF
+│   └── M7_VizLogHIL/
+│       └── VizLogHIL_M7.slx          # Phase 8 + HIL (Phase 10)
+│
+├── tests/                            # Gate tests and validation scripts
+│   ├── test_phase1.m                 (symlink or copy from config/ if preferred)
+│   ├── test_phase2_openloop.m
+│   ├── test_phase3_actuation.m       (to be created)
+│   └── ...
+│
+├── plots/                            # Plotting utilities (post‑processing)
+│   ├── plot_phase2.m
+│   ├── plot_phase3.m
+│   └── compare_runs.m                # Algorithm comparison (Phase 9)
+│
+├── results/                          # Simulation outputs (gitignored)
+│   ├── phase2_results.mat
+│   ├── run_YYYYMMDD_HHMMSS_PID.mat
+│   └── figures/
+│
+├── hil/                              # Hardware‑in‑the‑loop (Phase 10)
+│   ├── esp32_firmware/
+│   │   └── pwm_receiver.ino          # ESP32 code
+│   └── serial_interface.m            # MATLAB serial helper
+│
+├── docs/                             # Additional documentation
+│   ├── architecture.pdf              (your design doc)
+│   └── bus_specification.md
+│
+└── external/                         # Third‑party toolboxes (not committed)
+    └── MSS/                          # MSS Toolbox – link or submodule
