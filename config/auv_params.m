@@ -160,27 +160,27 @@ auv.ic.x0_helix = [0.5; 0; 0; 0; 0; 3*pi/4;    % Near helix start
 %     Channels: surge (u), depth (z), pitch (theta), heading (psi), yaw (r)
 % =========================================================================
 % Surge PID
-auv.ctrl.u.Kp       = 1.9;
-auv.ctrl.u.Ki       = 0.0;     % Pure PD for surge
-auv.ctrl.u.Kd       = 0.1;
-auv.ctrl.u.u_max    = 40;      % RPM equivalent upper limit
+auv.ctrl.u.Kp       = 25.0;
+auv.ctrl.u.Ki       = 0.8;     % Pure PD for surge
+auv.ctrl.u.Kd       = 0.5;
+auv.ctrl.u.u_max    = 1525;      % RPM equivalent upper limit
 auv.ctrl.u.u_min    = 0;
 
 % Depth / pitch cascade — outer z-loop
-auv.ctrl.z.Kp       = 0.5;    % z error → theta_d
-auv.ctrl.z.Ki       = 0.05;
+auv.ctrl.z.Kp       = 1.2;    % z error → theta_d
+auv.ctrl.z.Ki       = 0.15;
 auv.ctrl.z.theta_d_max = deg2rad(20);   % Max commanded pitch (rad)
 
 % Depth / pitch cascade — inner theta-loop
-auv.ctrl.theta.Kp   = 3.5;
-auv.ctrl.theta.Ki   = 0.5;
-auv.ctrl.theta.Kd   = 0.3;
+auv.ctrl.theta.Kp   = 10.0;
+auv.ctrl.theta.Ki   = 1.5;
+auv.ctrl.theta.Kd   = 0.8;
 auv.ctrl.theta.sat  = deg2rad(15);   % Output saturation (rad)
 
 % Heading / yaw — with 3rd-order LP pre-filter
-auv.ctrl.psi.Kp     = 0.4;
-auv.ctrl.psi.Ki     = 0.3;
-auv.ctrl.psi.Kd     = 0.0;
+auv.ctrl.psi.Kp     = 3.0;
+auv.ctrl.psi.Ki     = 1.0;
+auv.ctrl.psi.Kd     = 0.5;
 auv.ctrl.psi.sat    = deg2rad(15);   % Output saturation (rad)
 auv.ctrl.psi.omega_filter = 0.5;    % LP filter bandwidth (rad/s)
 

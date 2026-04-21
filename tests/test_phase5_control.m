@@ -65,7 +65,7 @@ fprintf('\n--- Test 2: Depth step 0 → 5m, u0=1.5 m/s (60s) ---\n');
 x0_2    = zeros(12,1);  x0_2(1) = 1.5;  % start at cruise speed
 tspan2  = 0 : auv.sim.Ts : 60;
 z_des   = 5;   % 5m depth
-upsilon_des = atan2(z_des, 20);  % gentle dive angle toward 5m depth
+upsilon_des = 0
 
 [~, X2] = run_closedloop(tspan2, x0_2, ...
     @(x,t) guid_depth(1.5, upsilon_des, z_des, x), auv, opts);
@@ -226,8 +226,11 @@ function g = guid_heading(ud, psi_des)
 g.ud = ud;  g.chi_d = psi_des;  g.upsilon_d = 0;
 end
 
-function g = guid_depth(ud, upsilon_des, z_des, x) %#ok<INUSD>
-g.ud = ud;  g.chi_d = 0;  g.upsilon_d = upsilon_des;
+function g = guid_depth(ud, upsilon_des, z_des, x)  % upsilon_des is ignored
+    g.ud = ud;
+    g.chi_d = 0;
+    g.upsilon_d = 0;          % No feedforward for step test
+    g.z_des = z_des;          % Desired depth for controller
 end
 
 % =========================================================================
@@ -296,35 +299,54 @@ n_direct=max(0,min(1525,(1525/20)*out_u));
 if abs(out_u)<=cs.u.sat, cs.u.integral=cs.u.integral+e_u*Ts; end
 cs.u.e_prev=e_u;
 
-% Depth outer
-z_d=eta_hat(3);
-out_z=cs.z.Kp*(0-z_d)+cs.z.Ki*cs.z.integral;
-theta_d=guid.upsilon_d+max(-cs.z.theta_max,min(cs.z.theta_max,out_z));
-theta_d=max(-cs.z.theta_max,min(cs.z.theta_max,theta_d));
-if abs(out_z)<=cs.z.theta_max, cs.z.integral=cs.z.integral+(0-z_d)*Ts; end
+% Depth outer (robust to missing z_des)
+z_d = eta_hat(3);
+if isfield(guid, 'z_des')
+    z_ref = guid.z_des;
+else
+    z_ref = 0;   % default: surface
+end
+e_z = z_ref - z_d;
+out_z = cs.z.Kp * e_z + cs.z.Ki * cs.z.integral;
+theta_d = max(-cs.z.theta_max, min(cs.z.theta_max, out_z));
+if abs(out_z) <= cs.z.theta_max
+    cs.z.integral = cs.z.integral + e_z * Ts;
+end
 
 % Pitch inner
-e_th=atan2(sin(theta_d-theta),cos(theta_d-theta));
-dth=(e_th-cs.theta.e_prev)/Ts;
-out_th_r=cs.theta.Kp*e_th+cs.theta.Ki*cs.theta.integral+cs.theta.Kd*dth;
-out_th=max(-cs.theta.sat,min(cs.theta.sat,out_th_r));
-ff_p=(cs.W*cs.zg-cs.B*cs.zb)*sin(theta)+0.3*cs.m55*q-cs.m35*u*w;
-tau_M=cs.m55*out_th+ff_p;
-if abs(out_th_r)<=cs.theta.sat, cs.theta.integral=cs.theta.integral+e_th*Ts; end
-cs.theta.e_prev=e_th;
+e_th = atan2(sin(theta_d - theta), cos(theta_d - theta));
+dth = (e_th - cs.theta.e_prev) / Ts;
+out_th_r = cs.theta.Kp * e_th + cs.theta.Ki * cs.theta.integral + cs.theta.Kd * dth;
+out_th = max(-cs.theta.sat, min(cs.theta.sat, out_th_r));
+ff_p = (cs.W*cs.zg - cs.B*cs.zb)*sin(theta) + 0.3*cs.m55*q - cs.m35*u*w;
+tau_M = cs.m55 * out_th + ff_p;
+if abs(out_th_r) <= cs.theta.sat
+    cs.theta.integral = cs.theta.integral + e_th * Ts;
+end
+cs.theta.e_prev = e_th;
 
 % Heading
-e_chi=atan2(sin(guid.chi_d-chi_v),cos(guid.chi_d-chi_v));
-dpsi=(e_chi-cs.psi.e_prev)/Ts;
-out_p_r=cs.psi.Kp*e_chi+cs.psi.Ki*cs.psi.integral+cs.psi.Kd*dpsi;
-out_p=max(-cs.psi.sat,min(cs.psi.sat,out_p_r));
-ff_y=0.1*cs.m66*r+cs.m26*u*v;
-tau_N=cs.m66*out_p+ff_y;
-if abs(out_p_r)<=cs.psi.sat, cs.psi.integral=cs.psi.integral+e_chi*Ts; end
-cs.psi.e_prev=e_chi;
+e_chi = atan2(sin(guid.chi_d - chi_v), cos(guid.chi_d - chi_v));
+dpsi = (e_chi - cs.psi.e_prev) / Ts;
+out_p_r = cs.psi.Kp * e_chi + cs.psi.Ki * cs.psi.integral + cs.psi.Kd * dpsi;
+out_p = max(-cs.psi.sat, min(cs.psi.sat, out_p_r));
+ff_y = 0.1*cs.m66*r + cs.m26*u*v;
+tau_N = cs.m66 * out_p + ff_y;
+if abs(out_p_r) <= cs.psi.sat
+    cs.psi.integral = cs.psi.integral + e_chi * Ts;
+end
+cs.psi.e_prev = e_chi;
 
-tau_ctrl=zeros(6,1); tau_ctrl(5)=tau_M; tau_ctrl(6)=tau_N;
-debug.e_u=e_u; debug.e_chi=e_chi; debug.e_theta=e_th;
-debug.tau_M=tau_M; debug.tau_N=tau_N; debug.n_direct=n_direct;
-debug.ff_pitch=ff_p; debug.ff_yaw=ff_y;
+tau_ctrl = zeros(6,1);
+tau_ctrl(5) = tau_M;
+tau_ctrl(6) = tau_N;
+
+debug.e_u = e_u;
+debug.e_chi = e_chi;
+debug.e_theta = e_th;
+debug.tau_M = tau_M;
+debug.tau_N = tau_N;
+debug.n_direct = n_direct;
+debug.ff_pitch = ff_p;
+debug.ff_yaw = ff_y;
 end

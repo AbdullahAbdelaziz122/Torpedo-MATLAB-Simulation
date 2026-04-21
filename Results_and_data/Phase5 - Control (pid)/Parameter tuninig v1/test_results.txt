@@ -1,0 +1,48 @@
+========================================
+  Phase 5 Gate Test — PID Control
+========================================
+
+--- Test 1: Surge step 0 → 1.5 m/s (60s) ---
+  [PASS]  Surge reaches ≥ 1.3 m/s at t=60s
+  [PASS]  Surge steady-state error < 0.1 m/s
+  [PASS]  Surge never goes below 0 m/s
+  [PASS]  No NaN/Inf in surge test
+  u(60s) = 1.420 m/s   steady-state error = 0.0805 m/s
+
+--- Test 2: Depth step 0 → 5m, u0=1.5 m/s (60s) ---
+
+upsilon_des =
+
+     0
+
+  [PASS]  Depth reaches ≥ 3m at t=60s
+  [PASS]  Depth steady-state error < 0.5m at t=60s
+  [PASS]  Pitch bounded: max|theta| < 25 deg
+  [PASS]  No NaN/Inf in depth test
+  z(60s)=5.33m  theta_max=8.5 deg  error=0.327m
+
+--- Test 3: Heading step 0 → 45 deg, u0=1.5 m/s (40s) ---
+  [PASS]  Heading reaches ≥ 30 deg at t=40s
+  [PASS]  Heading steady-state error < 3 deg
+  [PASS]  Heading overshoot < 10 deg
+  [PASS]  No NaN/Inf in heading test
+  psi(40s)=45.0 deg  error=0.02 deg  overshoot=1.27 deg
+
+--- Test 4: Heading across ±pi boundary (0 → -170 deg) ---
+  [PASS]  Heading reaches target ± 5 deg at t=60s
+  [PASS]  Turns the short way (not 190 deg)
+  [PASS]  No NaN/Inf in boundary test
+  psi(60s)=-170.0 deg  error=0.02 deg
+
+--- Test 5: Anti-windup (90 deg heading step) ---
+  [PASS]  90 deg step: overshoot < 20 deg (anti-windup working)
+  [PASS]  No NaN/Inf in anti-windup test
+  Overshoot after 90 deg step = 1.3 deg
+
+  Results saved to phase5_results.mat
+
+========================================
+  All [PASS] → Phase 5 complete.
+  Run plot_phase5 to inspect responses.
+  Proceed to Phase 6 — Guidance (LOS).
+========================================
