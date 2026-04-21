@@ -154,8 +154,10 @@ psi_expected = deg2rad(-179);
 
 report('psi=181 deg wraps to -179 deg', abs(psi_wrapped - psi_expected) < 1e-10);
 
-% Continuity: |wrap(181°) - wrap(179°)| = 2 deg, not 360-2 = 358 deg
-angular_diff = abs(nav_after.eta_hat(6) - nav_before.eta_hat(6));
+% Continuity: Wrap the error to get the true shortest-path angular difference
+diff_raw = nav_after.eta_hat(6) - nav_before.eta_hat(6);
+angular_diff = abs(atan2(sin(diff_raw), cos(diff_raw))); % Control-system safe wrapping
+
 report('Angular diff across boundary = 2 deg (not 358 deg)', ...
     abs(angular_diff - deg2rad(2)) < 1e-10);
 
