@@ -171,6 +171,10 @@ filename = log_save(log, 'auv_log');
 fprintf('  Total wall time: %.1f s  (%.1fx real-time)\n\n', ...
     sim_time, T_end/sim_time);
 
+if live_plots
+    viz_close(viz);   % close live figures before opening post-run set
+end
+
 if show_final
     viz_final(log);
 end
@@ -435,50 +439,335 @@ ts=datestr(now,'yyyymmdd_HHMMSS');fn=sprintf('%s_%s.mat',prefix,ts);
 save(fn,'log');fprintf('  Saved: %s\n',fn);
 end
 
-% --- Viz Functions ---
-function viz=viz_init(upd)
-viz.update_every=upd;viz.initialized=true;
-f1=figure(10);set(f1,'Name','Live — Velocities','NumberTitle','off','Position',[10 560 640 420]);
-subplot(2,3,1);viz.h_u=animatedline('Color',[0.13 0.47 0.71]);title('Surge');
-subplot(2,3,2);viz.h_v=animatedline('Color',[0.90 0.45 0.10]);title('Sway');
-subplot(2,3,3);viz.h_w=animatedline('Color',[0.17 0.63 0.17]);title('Heave');
-subplot(2,3,4);viz.h_p=animatedline('Color',[0.84 0.15 0.16]);title('Roll rate');
-subplot(2,3,5);viz.h_q=animatedline('Color',[0.58 0.40 0.74]);title('Pitch rate');
-subplot(2,3,6);viz.h_r=animatedline('Color',[0.55 0.34 0.29]);title('Yaw rate');
-f2=figure(11);set(f2,'Name','Live — Position','NumberTitle','off','Position',[660 560 640 420]);
-subplot(2,3,1);viz.h_xn=animatedline('Color',[0.13 0.47 0.71]);title('North');
-subplot(2,3,2);viz.h_ye=animatedline('Color',[0.90 0.45 0.10]);title('East');
-subplot(2,3,3);viz.h_zd=animatedline('Color',[0.17 0.63 0.17]);title('Depth');
-subplot(2,3,4);viz.h_phi=animatedline('Color',[0.84 0.15 0.16]);title('Roll');
-subplot(2,3,5);viz.h_theta=animatedline('Color',[0.58 0.40 0.74]);title('Pitch');
-subplot(2,3,6);viz.h_psi=animatedline('Color',[0.55 0.34 0.29]);title('Yaw');
-f3=figure(12);set(f3,'Name','Live — Control','NumberTitle','off','Position',[10 80 640 420]);
-subplot(3,1,1);viz.h_n_rpm=animatedline('Color',[0.13 0.47 0.71]);title('RPM');
-subplot(3,1,2);viz.h_ds=animatedline('Color',[0.90 0.45 0.10]);title('Stern');
-subplot(3,1,3);viz.h_dr=animatedline('Color',[0.17 0.63 0.17]);title('Rudder');
-f4=figure(13);set(f4,'Name','Live — Errors','NumberTitle','off','Position',[660 80 640 420]);
-subplot(3,1,1);viz.h_xe=animatedline('Color',[0.13 0.47 0.71]);title('x_e');
-subplot(3,1,2);viz.h_lye=animatedline('Color',[0.84 0.15 0.16]);title('y_e');
-subplot(3,1,3);viz.h_lze=animatedline('Color',[0.17 0.63 0.17]);title('z_e');
+% --- Viz Style Helper ---
+function s = get_style_local()
+% Shared style constants — keep in sync with viz_lib.m get_style()
+s.lw_act=1.5; s.lw_ref=1.2; s.lw_lim=0.8; s.lw_zero=0.5;
+s.fs_sgt=12;  s.fs_ttl=10;  s.fs_lbl=9;   s.fs_lgn=8;
+s.c={[0.13 0.47 0.71],[0.90 0.45 0.10],[0.17 0.63 0.17], ...
+     [0.84 0.15 0.16],[0.58 0.40 0.74],[0.55 0.34 0.29]};
+end
+
+% --- Viz Functions (kept local for MATLAB scoping; synced with viz_lib.m) ---
+function viz = viz_init(update_every)
+if nargin < 1, update_every = 50; end
+viz.update_every = update_every; viz.initialized = true;
+s = get_style_local();
+
+% Figure 10 — 6-DOF Velocities
+fig1 = figure(10);
+set(fig1,'Name','Live — 6-DOF Velocities','NumberTitle','off','Position',[10 560 640 420]);
+clf(fig1);
+subplot(2,3,1);
+viz.h_ud = animatedline('Color','k','LineStyle','--','LineWidth',s.lw_ref,'DisplayName','u_d');
+viz.h_u  = animatedline('Color',s.c{1},'LineWidth',s.lw_act,'DisplayName','u');
+title('Surge u','FontSize',s.fs_ttl); ylabel('u (m/s)','FontSize',s.fs_lbl);
+legend('FontSize',s.fs_lgn,'Location','best'); grid on;
+subplot(2,3,2);
+viz.h_v = animatedline('Color',s.c{2},'LineWidth',s.lw_act);
+yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+title('Sway v','FontSize',s.fs_ttl); ylabel('v (m/s)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,3);
+viz.h_w = animatedline('Color',s.c{3},'LineWidth',s.lw_act);
+yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+title('Heave w','FontSize',s.fs_ttl); ylabel('w (m/s)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,4);
+viz.h_p = animatedline('Color',s.c{4},'LineWidth',s.lw_act);
+yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+title('Roll Rate p','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('p (deg/s)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,5);
+viz.h_q = animatedline('Color',s.c{5},'LineWidth',s.lw_act);
+title('Pitch Rate q','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('q (deg/s)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,6);
+viz.h_r = animatedline('Color',s.c{6},'LineWidth',s.lw_act);
+title('Yaw Rate r','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('r (deg/s)','FontSize',s.fs_lbl); grid on;
+sgtitle('Live: 6-DOF Velocities','FontSize',s.fs_sgt);
+viz.fig1 = fig1;
+
+% Figure 11 — Position & Attitude
+fig2 = figure(11);
+set(fig2,'Name','Live — Position & Attitude','NumberTitle','off','Position',[660 560 640 420]);
+clf(fig2);
+subplot(2,3,1);
+viz.h_xn = animatedline('Color',s.c{1},'LineWidth',s.lw_act);
+title('North x_N','FontSize',s.fs_ttl); ylabel('x_N (m)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,2);
+viz.h_ye = animatedline('Color',s.c{2},'LineWidth',s.lw_act);
+title('East y_E','FontSize',s.fs_ttl); ylabel('y_E (m)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,3);
+viz.h_zref = animatedline('Color','k','LineStyle','--','LineWidth',s.lw_ref,'DisplayName','z_{ref}');
+viz.h_zd   = animatedline('Color',s.c{3},'LineWidth',s.lw_act,'DisplayName','z_D');
+title('Depth z_D','FontSize',s.fs_ttl); ylabel('z_D (m)','FontSize',s.fs_lbl);
+legend('FontSize',s.fs_lgn,'Location','best'); grid on;
+subplot(2,3,4);
+viz.h_phi = animatedline('Color',s.c{4},'LineWidth',s.lw_act);
+yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+title('Roll \phi','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\phi (deg)','FontSize',s.fs_lbl); grid on;
+subplot(2,3,5);
+viz.h_ups   = animatedline('Color','k','LineStyle','--','LineWidth',s.lw_ref,'DisplayName','\upsilon_d');
+viz.h_theta = animatedline('Color',s.c{5},'LineWidth',s.lw_act,'DisplayName','\theta');
+title('Pitch \theta','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\theta (deg)','FontSize',s.fs_lbl);
+legend('FontSize',s.fs_lgn,'Location','best'); grid on;
+subplot(2,3,6);
+viz.h_chid = animatedline('Color','k','LineStyle','--','LineWidth',s.lw_ref,'DisplayName','\chi_d');
+viz.h_psi  = animatedline('Color',s.c{6},'LineWidth',s.lw_act,'DisplayName','\psi');
+title('Yaw \psi','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\psi (deg)','FontSize',s.fs_lbl);
+legend('FontSize',s.fs_lgn,'Location','best'); grid on;
+sgtitle('Live: Position & Attitude','FontSize',s.fs_sgt);
+viz.fig2 = fig2;
+
+% Figure 12 — Actuator Commands
+fig3 = figure(12);
+set(fig3,'Name','Live — Actuator Commands','NumberTitle','off','Position',[10 80 640 420]);
+clf(fig3);
+subplot(3,1,1);
+viz.h_n_rpm = animatedline('Color',s.c{1},'LineWidth',s.lw_act);
+yline(1525,'--r','LineWidth',s.lw_lim,'Label','Max 1525 RPM','HandleVisibility','off');
+yline(0,'--k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Propeller Speed','FontSize',s.fs_ttl); ylabel('n (RPM)','FontSize',s.fs_lbl);
+ylim([-50 1600]); grid on;
+subplot(3,1,2);
+viz.h_ds = animatedline('Color',s.c{2},'LineWidth',s.lw_act);
+yline( 20,'--r','LineWidth',s.lw_lim,'Label','+20°','HandleVisibility','off');
+yline(-20,'--r','LineWidth',s.lw_lim,'Label','-20°','HandleVisibility','off');
+title('Stern Plane \delta_s','FontSize',s.fs_ttl); ylabel('\delta_s (deg)','FontSize',s.fs_lbl);
+ylim([-25 25]); grid on;
+subplot(3,1,3);
+viz.h_dr = animatedline('Color',s.c{3},'LineWidth',s.lw_act);
+yline( 20,'--r','LineWidth',s.lw_lim,'Label','+20°','HandleVisibility','off');
+yline(-20,'--r','LineWidth',s.lw_lim,'Label','-20°','HandleVisibility','off');
+title('Rudder \delta_r','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\delta_r (deg)','FontSize',s.fs_lbl);
+ylim([-25 25]); grid on;
+sgtitle('Live: Actuator Commands','FontSize',s.fs_sgt);
+viz.fig3 = fig3;
+
+% Figure 13 — LOS Cross-track Errors
+fig4 = figure(13);
+set(fig4,'Name','Live — LOS Cross-track Errors','NumberTitle','off','Position',[660 80 640 420]);
+clf(fig4);
+subplot(3,1,1);
+viz.h_xe = animatedline('Color',s.c{1},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Along-track Error x_e','FontSize',s.fs_ttl); ylabel('x_e (m)','FontSize',s.fs_lbl); grid on;
+subplot(3,1,2);
+viz.h_lye = animatedline('Color',s.c{4},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Lateral Cross-track y_e','FontSize',s.fs_ttl); ylabel('y_e (m)','FontSize',s.fs_lbl); grid on;
+subplot(3,1,3);
+viz.h_lze = animatedline('Color',s.c{3},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Vertical Cross-track z_e','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('z_e (m)','FontSize',s.fs_lbl); grid on;
+sgtitle('Live: LOS Cross-track Errors','FontSize',s.fs_sgt);
+viz.fig4 = fig4;
+
 drawnow;
 end
 
-function viz=viz_update(viz,log)
-k=log.k;if k<1,return,end;t=log.t(k);
-addpoints(viz.h_u,t,log.x(1,k));addpoints(viz.h_v,t,log.x(2,k));addpoints(viz.h_w,t,log.x(3,k));
-addpoints(viz.h_p,t,rad2deg(log.x(4,k)));addpoints(viz.h_q,t,rad2deg(log.x(5,k)));addpoints(viz.h_r,t,rad2deg(log.x(6,k)));
-addpoints(viz.h_xn,t,log.x(7,k));addpoints(viz.h_ye,t,log.x(8,k));addpoints(viz.h_zd,t,log.x(9,k));
-addpoints(viz.h_phi,t,rad2deg(log.x(10,k)));addpoints(viz.h_theta,t,rad2deg(log.x(11,k)));addpoints(viz.h_psi,t,rad2deg(log.x(12,k)));
-addpoints(viz.h_n_rpm,t,log.n_direct(k));addpoints(viz.h_ds,t,rad2deg(log.ui(2,k)));addpoints(viz.h_dr,t,rad2deg(log.ui(1,k)));
-addpoints(viz.h_xe,t,log.los_xe(k));addpoints(viz.h_lye,t,log.los_ye(k));addpoints(viz.h_lze,t,log.los_ze(k));
+function viz = viz_update(viz, log)
+k = log.k; if k < 1, return; end; t = log.t(k);
+% Figure 10 — Velocities
+addpoints(viz.h_ud, t, log.ud(k));
+addpoints(viz.h_u,  t, log.x(1,k));
+addpoints(viz.h_v,  t, log.x(2,k));
+addpoints(viz.h_w,  t, log.x(3,k));
+addpoints(viz.h_p,  t, rad2deg(log.x(4,k)));
+addpoints(viz.h_q,  t, rad2deg(log.x(5,k)));
+addpoints(viz.h_r,  t, rad2deg(log.x(6,k)));
+% Figure 11 — Position / Attitude
+addpoints(viz.h_xn,    t, log.x(7,k));
+addpoints(viz.h_ye,    t, log.x(8,k));
+addpoints(viz.h_zd,    t, log.x(9,k));
+addpoints(viz.h_zref,  t, log.x(9,k) - log.los_ze(k));   % z_ref from LOS
+addpoints(viz.h_phi,   t, rad2deg(log.x(10,k)));
+addpoints(viz.h_ups,   t, rad2deg(log.upsilon_d(k)));
+addpoints(viz.h_theta, t, rad2deg(log.x(11,k)));
+addpoints(viz.h_chid,  t, rad2deg(log.chi_d(k)));
+addpoints(viz.h_psi,   t, rad2deg(log.x(12,k)));
+% Figure 12 — Actuators
+addpoints(viz.h_n_rpm, t, log.n_direct(k));
+addpoints(viz.h_ds,    t, rad2deg(log.ui(2,k)));
+addpoints(viz.h_dr,    t, rad2deg(log.ui(1,k)));
+% Figure 13 — Errors
+addpoints(viz.h_xe,  t, log.los_xe(k));
+addpoints(viz.h_lye, t, log.los_ye(k));
+addpoints(viz.h_lze, t, log.los_ze(k));
 drawnow limitrate;
 end
 
+function viz_close(viz)
+for fnum = [10 11 12 13]
+    if ishandle(fnum), close(fnum); end
+end
+fprintf('  Live figures (10-13) closed.\n');
+end
+
 function viz_final(log)
-k=log.k;t=log.t(1:k);c={[0.13 0.47 0.71],[0.90 0.45 0.10],[0.17 0.63 0.17],[0.84 0.15 0.16],[0.58 0.40 0.74],[0.55 0.34 0.29]};
-figure(20);plot3(log.x(7,1:k),log.x(8,1:k),-log.x(9,1:k),'Color',c{1},'LineWidth',1.5);grid on;axis equal;view(30,25);title('3D AUV trajectory');
-figure(21);for i=1:6,subplot(4,3,i);plot(t,log.x(i,1:k),'Color',c{i});subplot(4,3,6+i);plot(t,log.x(6+i,1:k),'Color',c{i});end
-figure(22);subplot(3,1,1);plot(t,log.n_direct(1:k));subplot(3,1,2);plot(t,rad2deg(log.ui(2,1:k)));subplot(3,1,3);plot(t,rad2deg(log.ui(1,1:k)));
-figure(23);subplot(3,1,1);plot(t,log.los_xe(1:k));subplot(3,1,2);plot(t,log.los_ye(1:k));subplot(3,1,3);plot(t,log.los_ze(1:k));
-figure(24);subplot(2,2,1);plot(t,log.Vc(1:k));subplot(2,2,2);plot(t,rad2deg(log.betaVc(1:k)));subplot(2,2,3);plot(t,log.tau_env(3,1:k));subplot(2,2,4);plot(t,log.tau_env(5,1:k));
+if ~isfield(log,'k') || log.k < 2, return; end
+s  = get_style_local();
+k  = log.k;  t = log.t(1:k);
+z_ref = log.x(9,1:k) - log.los_ze(1:k);   % guidance depth reference
+
+% --- Figure 20: 3D Trajectory ---
+fig20 = figure(20);
+set(fig20,'Name','Post-run — 3D Trajectory','NumberTitle','off','Position',[50 430 720 520]);
+clf(fig20);
+plot3(log.x(7,1:k), log.x(8,1:k), -log.x(9,1:k), ...
+    'Color',s.c{1},'LineWidth',s.lw_act,'DisplayName','Vehicle path');
+hold on;
+scatter3(log.x(7,1), log.x(8,1), -log.x(9,1), 100,'g','filled','DisplayName','Start');
+scatter3(log.x(7,k), log.x(8,k), -log.x(9,k), 100,'r','filled','DisplayName','End');
+hold off;
+xlabel('North (m)','FontSize',s.fs_lbl); ylabel('East (m)','FontSize',s.fs_lbl);
+zlabel('Altitude — up+ve (m)','FontSize',s.fs_lbl);
+title(sprintf('3D AUV Trajectory  [T = %.0f s,  d = %.0f m]', ...
+    t(k), norm(log.x(7:9,k)-log.x(7:9,1))),'FontSize',s.fs_ttl);
+legend('FontSize',s.fs_lgn,'Location','best');
+grid on; daspect([1 1 0.05]); view(30,25);
+
+% --- Figure 21: All 12 States ---
+fig21 = figure(21);
+set(fig21,'Name','Post-run — All 12 States','NumberTitle','off','Position',[50 30 1140 720]);
+clf(fig21);
+vel_titles  = {'Surge u','Sway v','Heave w','Roll Rate p','Pitch Rate q','Yaw Rate r'};
+vel_ylabels = {'u (m/s)','v (m/s)','w (m/s)','p (deg/s)','q (deg/s)','r (deg/s)'};
+for i = 1:6
+    ax = subplot(4,3,i); hold(ax,'on');
+    switch i
+        case 1
+            h1 = plot(t, log.ud(1:k),'--k','LineWidth',s.lw_ref,'DisplayName','u_d');
+            h2 = plot(t, log.x(1,1:k),'Color',s.c{i},'LineWidth',s.lw_act,'DisplayName','u');
+            legend([h1 h2],'FontSize',s.fs_lgn,'Location','best');
+        case {2,3}
+            yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+            plot(t, log.x(i,1:k),'Color',s.c{i},'LineWidth',s.lw_act);
+        case 4
+            yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+            plot(t, rad2deg(log.x(i,1:k)),'Color',s.c{i},'LineWidth',s.lw_act);
+        case {5,6}
+            plot(t, rad2deg(log.x(i,1:k)),'Color',s.c{i},'LineWidth',s.lw_act);
+    end
+    title(vel_titles{i},'FontSize',s.fs_ttl);
+    xlabel('t (s)','FontSize',s.fs_lbl); ylabel(vel_ylabels{i},'FontSize',s.fs_lbl);
+    grid on; hold(ax,'off');
+end
+pos_titles  = {'North x_N','East y_E','Depth z_D','Roll \phi','Pitch \theta','Yaw \psi'};
+pos_ylabels = {'x_N (m)','y_E (m)','z_D (m)','\phi (deg)','\theta (deg)','\psi (deg)'};
+for i = 1:6
+    ax = subplot(4,3,6+i); hold(ax,'on');
+    switch i
+        case {1,2}
+            plot(t, log.x(6+i,1:k),'Color',s.c{i},'LineWidth',s.lw_act);
+        case 3
+            h1 = plot(t, z_ref,'--k','LineWidth',s.lw_ref,'DisplayName','z_{ref}');
+            h2 = plot(t, log.x(9,1:k),'Color',s.c{i},'LineWidth',s.lw_act,'DisplayName','z_D');
+            legend([h1 h2],'FontSize',s.fs_lgn,'Location','best');
+        case 4
+            yline(0,'--k','LineWidth',s.lw_ref,'Label','ref=0','HandleVisibility','off');
+            plot(t, rad2deg(log.x(10,1:k)),'Color',s.c{i},'LineWidth',s.lw_act);
+        case 5
+            h1 = plot(t, rad2deg(log.upsilon_d(1:k)),'--k','LineWidth',s.lw_ref,'DisplayName','\upsilon_d');
+            h2 = plot(t, rad2deg(log.x(11,1:k)),'Color',s.c{i},'LineWidth',s.lw_act,'DisplayName','\theta');
+            legend([h1 h2],'FontSize',s.fs_lgn,'Location','best');
+        case 6
+            h1 = plot(t, rad2deg(log.chi_d(1:k)),'--k','LineWidth',s.lw_ref,'DisplayName','\chi_d');
+            h2 = plot(t, rad2deg(log.x(12,1:k)),'Color',s.c{i},'LineWidth',s.lw_act,'DisplayName','\psi');
+            legend([h1 h2],'FontSize',s.fs_lgn,'Location','best');
+    end
+    title(pos_titles{i},'FontSize',s.fs_ttl);
+    xlabel('t (s)','FontSize',s.fs_lbl); ylabel(pos_ylabels{i},'FontSize',s.fs_lbl);
+    grid on; hold(ax,'off');
+end
+sgtitle('Post-run: All 12 States — Desired vs Actual','FontSize',s.fs_sgt);
+
+% --- Figure 22: Actuator Signals ---
+fig22 = figure(22);
+set(fig22,'Name','Post-run — Actuator Signals','NumberTitle','off','Position',[800 430 640 460]);
+clf(fig22);
+subplot(3,1,1);
+plot(t, log.n_direct(1:k),'Color',s.c{1},'LineWidth',s.lw_act);
+hold on;
+yline(1525,'--r','LineWidth',s.lw_lim,'Label','Max 1525 RPM','HandleVisibility','off');
+yline(0,'--k','LineWidth',s.lw_zero,'HandleVisibility','off');
+hold off;
+title('Propeller Speed','FontSize',s.fs_ttl);
+ylabel('n (RPM)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl);
+ylim([-50 1600]); grid on;
+subplot(3,1,2);
+plot(t, rad2deg(log.ui(2,1:k)),'Color',s.c{2},'LineWidth',s.lw_act);
+hold on;
+yline( 20,'--r','LineWidth',s.lw_lim,'Label','+20° limit','HandleVisibility','off');
+yline(-20,'--r','LineWidth',s.lw_lim,'Label','-20° limit','HandleVisibility','off');
+hold off;
+title('Stern Plane \delta_s','FontSize',s.fs_ttl);
+ylabel('\delta_s (deg)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl);
+ylim([-25 25]); grid on;
+subplot(3,1,3);
+plot(t, rad2deg(log.ui(1,1:k)),'Color',s.c{3},'LineWidth',s.lw_act);
+hold on;
+yline( 20,'--r','LineWidth',s.lw_lim,'Label','+20° limit','HandleVisibility','off');
+yline(-20,'--r','LineWidth',s.lw_lim,'Label','-20° limit','HandleVisibility','off');
+hold off;
+title('Rudder \delta_r','FontSize',s.fs_ttl);
+ylabel('\delta_r (deg)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl);
+ylim([-25 25]); grid on;
+sgtitle('Post-run: Actuator Signals','FontSize',s.fs_sgt);
+
+% --- Figure 23: LOS Cross-track Errors ---
+fig23 = figure(23);
+set(fig23,'Name','Post-run — LOS Cross-track Errors','NumberTitle','off','Position',[800 30 640 440]);
+clf(fig23);
+rms_xe = sqrt(mean(log.los_xe(1:k).^2));
+rms_ye = sqrt(mean(log.los_ye(1:k).^2));
+rms_ze = sqrt(mean(log.los_ze(1:k).^2));
+subplot(3,1,1);
+plot(t, log.los_xe(1:k),'Color',s.c{1},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title(sprintf('Along-track Error x_e    [RMS = %.2f m]', rms_xe),'FontSize',s.fs_ttl);
+ylabel('x_e (m)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl); grid on;
+subplot(3,1,2);
+plot(t, log.los_ye(1:k),'Color',s.c{4},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title(sprintf('Lateral Cross-track y_e    [RMS = %.2f m]', rms_ye),'FontSize',s.fs_ttl);
+ylabel('y_e (m)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl); grid on;
+subplot(3,1,3);
+plot(t, log.los_ze(1:k),'Color',s.c{3},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title(sprintf('Vertical Cross-track z_e    [RMS = %.2f m]', rms_ze),'FontSize',s.fs_ttl);
+ylabel('z_e (m)','FontSize',s.fs_lbl); xlabel('t (s)','FontSize',s.fs_lbl); grid on;
+sgtitle('Post-run: LOS Cross-track Errors','FontSize',s.fs_sgt);
+
+% --- Figure 24: Environmental Disturbances ---
+fig24 = figure(24);
+set(fig24,'Name','Post-run — Environmental Disturbances','NumberTitle','off','Position',[50 30 700 420]);
+clf(fig24);
+subplot(2,2,1);
+plot(t, log.Vc(1:k),'Color',s.c{1},'LineWidth',s.lw_act);
+title('Ocean Current Speed','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('V_c (m/s)','FontSize',s.fs_lbl); grid on;
+subplot(2,2,2);
+plot(t, rad2deg(log.betaVc(1:k)),'Color',s.c{2},'LineWidth',s.lw_act);
+title('Current Direction','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\beta_{Vc} (deg)','FontSize',s.fs_lbl); grid on;
+subplot(2,2,3);
+plot(t, log.tau_env(3,1:k),'Color',s.c{3},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Wave Heave Force \tau_Z','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\tau_Z (N)','FontSize',s.fs_lbl); grid on;
+subplot(2,2,4);
+plot(t, log.tau_env(5,1:k),'Color',s.c{4},'LineWidth',s.lw_act);
+yline(0,'-k','LineWidth',s.lw_zero,'HandleVisibility','off');
+title('Wave Pitch Moment \tau_M','FontSize',s.fs_ttl);
+xlabel('t (s)','FontSize',s.fs_lbl); ylabel('\tau_M (N·m)','FontSize',s.fs_lbl); grid on;
+sgtitle('Post-run: Environmental Disturbances','FontSize',s.fs_sgt);
+
+fprintf('\n  Post-run figures 20-24 generated.\n');
+fprintf('  RMS cross-track:  x_e=%.3fm  y_e=%.3fm  z_e=%.3fm\n', rms_xe, rms_ye, rms_ze);
 end
