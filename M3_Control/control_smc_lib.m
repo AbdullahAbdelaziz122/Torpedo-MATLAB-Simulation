@@ -136,19 +136,15 @@ Ts     = cs.dt;
 % CHANNEL 1: Surge — SMC → direct RPM
 % =========================================================================
 e_u = guid.ud - u;
-
-% Sliding surface: s = e + lambda * integral(e)
 [s_u, cs.u] = smc_surface(e_u, cs.u, Ts);
 
-% SMC control output (force units)
+% Total required surge force (Fixed dimensionality)
 u_smc = cs.u.lambda * e_u + cs.u.k * sat_func(s_u / cs.u.phi);
-
-% Feedforward: Coriolis coupling (same as PID)
 ff_surge = cs.m11 * (v*r - w*q);
+tau_X = cs.m11 * u_smc + ff_surge;
 
-% Convert to RPM (same scaling as PID)
-n_direct = max(0, (1525/20) * (cs.m11 * u_smc + ff_surge / cs.m11));
-n_direct = min(1525, n_direct);
+% Convert force to RPM
+n_direct = max(0, min(1525, (1525/20) * tau_X));
 
 % =========================================================================
 % CHANNEL 2: Depth — PI outer loop → theta_d (same as PID)
@@ -164,37 +160,36 @@ if abs(out_z) <= cs.z.theta_max
 end
 
 % =========================================================================
-% CHANNEL 2 inner: Pitch — SMC → tau_M
+% CHANNEL 2 inner: Pitch — SMC → tau_M (FIXED FOR 2ND ORDER)
 % =========================================================================
 e_theta = atan2(sin(theta_d - theta), cos(theta_d - theta));
+e_theta_dot = -q; % Derivative of error
 
-[s_th, cs.theta] = smc_surface(e_theta, cs.theta, Ts);
+% 2nd-order sliding surface
+s_th = e_theta_dot + cs.theta.lambda * e_theta;
 
-% SMC pitch output
-theta_smc = cs.theta.lambda * e_theta + cs.theta.k * sat_func(s_th / cs.theta.phi);
-theta_smc = max(-cs.theta.sat, min(cs.theta.sat, theta_smc));
+% Equivalent control acceleration
+theta_smc_accel = cs.theta.lambda * e_theta_dot + cs.theta.k * sat_func(s_th / cs.theta.phi);
+theta_smc_accel = max(-cs.theta.sat, min(cs.theta.sat, theta_smc_accel));
 
-% Feedforward (identical to PID)
-ff_pitch = (cs.W*cs.zg - cs.B*cs.zb)*sin(theta) ...
-           + 0.3*cs.m55*q - cs.m35*u*w;
-
-tau_M = cs.m55 * theta_smc + ff_pitch;
+ff_pitch = (cs.W*cs.zg - cs.B*cs.zb)*sin(theta) + 0.3*cs.m55*q - cs.m35*u*w;
+tau_M = cs.m55 * theta_smc_accel + ff_pitch;
 
 % =========================================================================
-% CHANNEL 3: Heading — SMC → tau_N
+% CHANNEL 3: Heading — SMC → tau_N (FIXED FOR 2ND ORDER)
 % =========================================================================
 e_chi = atan2(sin(guid.chi_d - chi_v), cos(guid.chi_d - chi_v));
+e_chi_dot = -r; % Derivative of error
 
-[s_psi, cs.psi] = smc_surface(e_chi, cs.psi, Ts);
+% 2nd-order sliding surface
+s_psi = e_chi_dot + cs.psi.lambda * e_chi;
 
-% SMC yaw output
-psi_smc = cs.psi.lambda * e_chi + cs.psi.k * sat_func(s_psi / cs.psi.phi);
-psi_smc = max(-cs.psi.sat, min(cs.psi.sat, psi_smc));
+% Equivalent control acceleration
+psi_smc_accel = cs.psi.lambda * e_chi_dot + cs.psi.k * sat_func(s_psi / cs.psi.phi);
+psi_smc_accel = max(-cs.psi.sat, min(cs.psi.sat, psi_smc_accel));
 
-% Feedforward (identical to PID)
 ff_yaw = 0.1*cs.m66*r + cs.m26*u*v;
-
-tau_N = cs.m66 * psi_smc + ff_yaw;
+tau_N = cs.m66 * psi_smc_accel + ff_yaw;
 
 % =========================================================================
 % Assemble outputs (identical structure to PID)

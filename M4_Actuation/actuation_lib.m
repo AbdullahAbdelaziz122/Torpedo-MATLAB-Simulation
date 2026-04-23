@@ -43,25 +43,26 @@ function [ui_sat, sat_flags] = tau_to_ui(tau_ctrl, U, auv)
 %   sat_flags[3×1]  uint8 per channel: 0=free, 1=upper, 2=lower
 
 rho   = auv.phys.rho;
-U_eff = max(U, 0.3);   % speed floor — fins are ineffective below 0.3 m/s
+U_eff = max(U, 0.3);   % speed floor
 
-% Rudder: tau_ctrl(2) = Y → delta_r
-% Inversion of:  Y = 0.5*rho*U^2 * A_r * CL * delta_r
-% A_r = 2*S_fin (combined two-rudder area) — already in auv.act.A_r
-denom_r  = 0.5 * rho * U_eff^2 * auv.act.A_r * auv.act.CL_delta_r;
-delta_r  = tau_ctrl(2) / denom_r;        % raw, unbounded (rad)
+% Lever arms (distance from origin to fins, negative means aft of CG)
+x_r = auv.act.x_r; 
+x_s = auv.act.x_s;
 
-% Stern plane: tau_ctrl(3) = Z → delta_s
-% Inversion of:  Z = 0.5*rho*U^2 * A_s * CL * delta_s
-denom_s  = 0.5 * rho * U_eff^2 * auv.act.A_s * auv.act.CL_delta_s;
-delta_s  = tau_ctrl(3) / denom_s;        % raw, unbounded (rad)
+% Rudder: tau_ctrl(6) = N (Yaw Moment) → delta_r
+% Inversion of: N = x_r * Y_r = x_r * (-0.5 * rho * U^2 * A_r * CL * delta_r)
+denom_r  = -0.5 * rho * U_eff^2 * auv.act.A_r * auv.act.CL_delta_r * x_r;
+delta_r  = tau_ctrl(6) / denom_r;        % raw, unbounded (rad)
 
-% Surge: tau_ctrl(1) = X → RPM via thrust inversion (Bug 3: NO clamp here)
-n_rpm    = rpm_from_thrust(tau_ctrl(1), U_eff, auv);   % raw, unbounded RPM
+% Stern plane: tau_ctrl(5) = M (Pitch Moment) → delta_s
+% Inversion of: M = -x_s * Z_s = -x_s * (-0.5 * rho * U^2 * A_s * CL * delta_s)
+denom_s  = 0.5 * rho * U_eff^2 * auv.act.A_s * auv.act.CL_delta_s * x_s;
+delta_s  = tau_ctrl(5) / denom_s;        % raw, unbounded (rad)
 
-% saturate_ui is the single enforcement point
+% Surge: tau_ctrl(1) = X → RPM
+n_rpm    = rpm_from_thrust(tau_ctrl(1), U_eff, auv);
+
 [ui_sat, sat_flags] = saturate_ui([delta_r; delta_s; n_rpm], auv);
-
 end
 
 % =========================================================================
