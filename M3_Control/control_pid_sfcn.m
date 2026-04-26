@@ -100,20 +100,21 @@ catch
     Ts = 0.01;
 end
 block.SampleTimes    = [Ts 0];
-block.NumDwork       = 8;
+%block.NumDworks       = 8;
 
-for k = 1:8
-    block.Dwork(k).Name            = sprintf('ds%d',k);
-    block.Dwork(k).Dimensions      = 1;
-    block.Dwork(k).DatatypeID      = 0;   % double
-    block.Dwork(k).Complexity      = 'Real';
-    block.Dwork(k).UsedAsDiscState = true;
-end
+%for k = 1:8
+%    block.Dwork(k).Name            = sprintf('ds%d',k);
+%    block.Dwork(k).Dimensions      = 1;
+%    block.Dwork(k).DatatypeID      = 0;   % double
+%    block.Dwork(k).Complexity      = 'Real';
+%    block.Dwork(k).UsedAsDiscState = true;
+%end
 
 block.SimStateCompliance = 'DefaultSimState';
-
+block.RegBlockMethod('PostPropagationSetup', @PostPropagationSetup); % <-- ADD THIS
 block.RegBlockMethod('InitializeConditions', @InitConditions);
 block.RegBlockMethod('Outputs',              @Outputs);
+
 block.RegBlockMethod('Update',               @Update);
 block.RegBlockMethod('Terminate',            @Terminate);
 
@@ -215,6 +216,17 @@ block.Dwork(5).Data = e_u;
 block.Dwork(6).Data = e_theta;
 block.Dwork(7).Data = e_chi;
 
+% =========================================================================
+function PostPropagationSetup(block)
+%% Setup Dwork vectors (discrete states)
+block.NumDworks = 8;
+for k = 1:8
+    block.Dwork(k).Name            = sprintf('ds%d',k);
+    block.Dwork(k).Dimensions      = 1;
+    block.Dwork(k).DatatypeID      = 0;   % double
+    block.Dwork(k).Complexity      = 'Real';
+    block.Dwork(k).UsedAsDiscState = true;
+end
 % =========================================================================
 function Update(block)
 % Update integrator states with anti-windup

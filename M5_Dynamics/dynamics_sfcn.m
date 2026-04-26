@@ -46,7 +46,7 @@ setup(block);
 function setup(block)
 
 % --- Register number of ports ---
-block.NumInputPorts  = 4;
+block.NumInputPorts  = 5;
 block.NumOutputPorts = 3;
 
 % --- Input port sizes and types ---
@@ -73,6 +73,12 @@ block.InputPort(4).Dimensions  = 1;
 block.InputPort(4).DatatypeID  = 0;
 block.InputPort(4).Complexity  = 'Real';
 block.InputPort(4).DirectFeedthrough = true;
+
+% u5: tau_env [6x1]
+block.InputPort(5).Dimensions  = 6;
+block.InputPort(5).DatatypeID  = 0;
+block.InputPort(5).Complexity  = 'Real';
+block.InputPort(5).DirectFeedthrough = true;
 
 % --- Output port sizes ---
 % y1: full state x [12×1]
@@ -123,6 +129,7 @@ end
 block.ContStates.Data = x0(:);
 
 % =========================================================================
+% =========================================================================
 function Outputs(block)
 % Called at each output step. State is already integrated — just assign outputs.
 
@@ -130,15 +137,22 @@ x = block.ContStates.Data;
 
 % Compute xdot and U for outputs (remus100 is cheap to call twice;
 % Simulink calls Derivatives separately for the solver steps)
-ui     = block.InputPort(1).Data;
-Vc     = block.InputPort(2).Data;
-betaVc = block.InputPort(3).Data;
-w_c    = block.InputPort(4).Data;
+ui      = block.InputPort(1).Data;
+Vc      = block.InputPort(2).Data;
+betaVc  = block.InputPort(3).Data;
+w_c     = block.InputPort(4).Data;
+tau_env = block.InputPort(5).Data; % <--- 1. Read Port 5 (Wave forces)
 
+% <--- 2. Calculate the environmental acceleration
+[~, ~, M] = remus100();
+a_env = [M \ tau_env(1:6); zeros(6,1)];
+
+% <--- 3. Calculate nominal physics, then add the wave acceleration
 [xdot, U] = remus100(x, ui, Vc, betaVc, w_c);
+xdot = xdot + a_env; 
 
 block.OutputPort(1).Data = x;       % y1: state
-block.OutputPort(2).Data = xdot;    % y2: derivative
+block.OutputPort(2).Data = xdot;    % y2: derivative (now includes waves!)
 block.OutputPort(3).Data = U;       % y3: speed
 
 % =========================================================================
@@ -147,13 +161,19 @@ function Derivatives(block)
 % This is where the actual integration happens — Simulink advances
 % ContStates.Data using the derivative returned here.
 
-x      = block.ContStates.Data;
-ui     = block.InputPort(1).Data;
-Vc     = block.InputPort(2).Data;
-betaVc = block.InputPort(3).Data;
-w_c    = block.InputPort(4).Data;
+x       = block.ContStates.Data;
+ui      = block.InputPort(1).Data;
+Vc      = block.InputPort(2).Data;
+betaVc  = block.InputPort(3).Data;
+w_c     = block.InputPort(4).Data;
+tau_env = block.InputPort(5).Data; % Read the wave forces
 
-xdot = remus100(x, ui, Vc, betaVc, w_c);
+% Calculate environmental acceleration
+[~, ~, M] = remus100();
+a_env = [M \ tau_env(1:6); zeros(6,1)];
+
+% Inject into physics
+xdot = remus100(x, ui, Vc, betaVc, w_c) + a_env;
 
 block.Derivatives.Data = xdot;
 
